@@ -2,13 +2,13 @@
 
 <!DOCTYPE resources [
     <!ENTITY TERMUX_PACKAGE_NAME "com.termux">
-    <!ENTITY TERMUX_APP_NAME "Termux">
-    <!ENTITY TERMUX_API_APP_NAME "Termux:API">
-    <!ENTITY TERMUX_BOOT_APP_NAME "Termux:Boot">
-    <!ENTITY TERMUX_FLOAT_APP_NAME "Termux:Float">
-    <!ENTITY TERMUX_STYLING_APP_NAME "Termux:Styling">
-    <!ENTITY TERMUX_TASKER_APP_NAME "Termux:Tasker">
-    <!ENTITY TERMUX_WIDGET_APP_NAME "Termux:Widget">
+    <!ENTITY TERMUX_APP_NAME "Robert Méndez">
+    <!ENTITY TERMUX_API_APP_NAME "Robert Méndez:API">
+    <!ENTITY TERMUX_BOOT_APP_NAME "Robert Méndez:Boot">
+    <!ENTITY TERMUX_FLOAT_APP_NAME "Robert Méndez:Float">
+    <!ENTITY TERMUX_STYLING_APP_NAME "Robert Méndez:Styling">
+    <!ENTITY TERMUX_TASKER_APP_NAME "Robert Méndez:Tasker">
+    <!ENTITY TERMUX_WIDGET_APP_NAME "Robert Méndez:Widget">
     ]>
 
 <resources>
