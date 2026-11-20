@@ -13,7 +13,7 @@ ext {
 }
 
 android {
-    namespace "com.robertmendez.app" // <--- CAMBIADO AQUÍ PARA EVITAR CONFLICTOS
+    namespace "com.termux" // <--- RESTAURADO AQUÍ
 
     compileSdkVersion project.properties.compileSdkVersion.toInteger()
     ndkVersion = System.getenv("JITPACK_NDK_VERSION") ?: project.properties.ndkVersion
@@ -47,7 +47,7 @@ android {
         versionName "0.118.0"
 
         // ¡AQUÍ AGREGAMOS EL APPLICATION ID PARA QUE ANDROID LO RECONOZCA COMO APP DISTINTA!
-        applicationId "com.robertmendez.app" 
+        applicationId "com.robertmendez.app"
 
         if (appVersionName) versionName = appVersionName
         validateVersionName(versionName)
