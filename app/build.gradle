@@ -46,15 +46,16 @@ android {
         versionCode 118
         versionName "0.118.0"
 
-        // ¡AQUÍ AGREGAMOS EL APPLICATION ID PARA QUE ANDROID LO RECONOZCA COMO APP DISTINTA!
-        applicationId "com.robertmendez.app"
+        // ¡AQUÍ ESTÁ LA MAGIA! Dejamos el ID original para que el motor arranque sin quejarse
+        applicationId "com.termux"
 
         if (appVersionName) versionName = appVersionName
         validateVersionName(versionName)
 
         buildConfigField "String", "TERMUX_PACKAGE_VARIANT", "\"" + project.ext.packageVariant + "\"" // Used by TermuxApplication class
 
-        manifestPlaceholders.TERMUX_PACKAGE_NAME = "com.robertmendez.app"
+        // Aquí es donde le damos nuestro nombre para que se vea bonito en el celular
+        manifestPlaceholders.TERMUX_PACKAGE_NAME = "com.termux"
         manifestPlaceholders.TERMUX_APP_NAME = "Robert Méndez"
         manifestPlaceholders.TERMUX_API_APP_NAME = "Robert Méndez:API"
         manifestPlaceholders.TERMUX_BOOT_APP_NAME = "Robert Méndez:Boot"
