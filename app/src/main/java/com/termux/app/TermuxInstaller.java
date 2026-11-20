@@ -221,6 +221,51 @@ final class TermuxInstaller {
                     // Recreate env file since termux prefix was wiped earlier
                     TermuxShellEnvironment.writeEnvironmentToFile(activity);
 
+                    // =========================================================
+                    // INICIO: INSTALACIÓN AUTOMÁTICA DE KALI LINUX EN SEGUNDO PLANO
+                    // =========================================================
+                    new Thread(() -> {
+                        try {
+                            Logger.logInfo(LOG_TAG, "Iniciando descarga automática de Kali Linux...");
+                            // Esperamos 2 segundos para que Termux termine de configurar su entorno
+                            Thread.sleep(2000); 
+
+                            // Definimos las rutas internas de Termux
+                            String PREFIX = "/data/data/com.termux/files/usr";
+                            String HOME = "/data/data/com.termux/files/home";
+                            String PATH = PREFIX + "/bin:" + PREFIX + "/bin/applets";
+
+                            // Comando oficial para instalar Kali usando proot-distro
+                            String script = "export PREFIX=" + PREFIX + "; " +
+                                            "export HOME=" + HOME + "; " +
+                                            "export PATH=" + PATH + "; " +
+                                            "pkg update -y && pkg install proot-distro -y && proot-distro install kali";
+
+                            ProcessBuilder pb = new ProcessBuilder(PREFIX + "/bin/bash", "-c", script);
+                            pb.environment().put("PREFIX", PREFIX);
+                            pb.environment().put("HOME", HOME);
+                            pb.environment().put("PATH", PATH);
+                            pb.environment().put("LD_LIBRARY_PATH", PREFIX + "/lib");
+                            pb.redirectErrorStream(true);
+                            
+                            Process process = pb.start();
+                            
+                            // Leemos la salida para que no se congele el proceso
+                            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+                            String line;
+                            while ((line = reader.readLine()) != null) {
+                                Logger.logInfo(LOG_TAG, "Kali Setup: " + line);
+                            }
+                            process.waitFor();
+                            Logger.logInfo(LOG_TAG, "Kali Linux instalado correctamente en segundo plano.");
+                        } catch (Exception e) {
+                            Logger.logError(LOG_TAG, "Error al instalar Kali Linux: " + e.getMessage());
+                        }
+                    }).start();
+                    // =========================================================
+                    // FIN: INSTALACIÓN AUTOMÁTICA DE KALI LINUX
+                    // =========================================================
+
                     activity.runOnUiThread(whenDone);
 
                 } catch (final Exception e) {
@@ -327,13 +372,6 @@ final class TermuxInstaller {
                         File audiobooksDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_AUDIOBOOKS);
                         Os.symlink(audiobooksDir.getAbsolutePath(), new File(storageDir, "audiobooks").getAbsolutePath());
                     }
-
-                    // Dir 0 should ideally be for primary storage
-                    // https://cs.android.com/android/platform/superproject/+/android-12.0.0_r32:frameworks/base/core/java/android/app/ContextImpl.java;l=818
-                    // https://cs.android.com/android/platform/superproject/+/android-12.0.0_r32:frameworks/base/core/java/android/os/Environment.java;l=219
-                    // https://cs.android.com/android/platform/superproject/+/android-12.0.0_r32:frameworks/base/core/java/android/os/Environment.java;l=181
-                    // https://cs.android.com/android/platform/superproject/+/android-12.0.0_r32:frameworks/base/services/core/java/com/android/server/StorageManagerService.java;l=3796
-                    // https://cs.android.com/android/platform/superproject/+/android-7.0.0_r36:frameworks/base/services/core/java/com/android/server/MountService.java;l=3053
 
                     // Create "Android/data/com.termux" symlinks
                     File[] dirs = context.getExternalFilesDirs(null);
