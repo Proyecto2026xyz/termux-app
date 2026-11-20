@@ -15,7 +15,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package_variant: [ apt-android-7, apt-android-5 ]
+        # AQUÍ ESTÁ EL CAMBIO: Solo dejamos la versión moderna
+        package_variant: [ apt-android-7 ]
 
     steps:
       - name: Clone repository
