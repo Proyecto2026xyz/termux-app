@@ -268,11 +268,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                 
                                 // 1. Crear sesión superior
                                 mTermuxTerminalSessionActivityClient.addNewSession(launchFailsafe, "Sesión Top");
-                                TerminalSession topSession = mTermuxTerminalSessionActivityClient.getCurrentSession();
+                                // CORRECCIÓN: Obtener la sesión desde mTermuxService
+                                TerminalSession topSession = mTermuxService.getLastTermuxSession() != null ? mTermuxService.getLastTermuxSession().getTerminalSession() : null;
 
                                 // 2. Crear sesión inferior
                                 mTermuxTerminalSessionActivityClient.addNewSession(launchFailsafe, "Sesión Bottom");
-                                TerminalSession bottomSession = mTermuxTerminalSessionActivityClient.getCurrentSession();
+                                // CORRECCIÓN: Obtener la sesión desde mTermuxService
+                                TerminalSession bottomSession = mTermuxService.getLastTermuxSession() != null ? mTermuxService.getLastTermuxSession().getTerminalSession() : null;
 
                                 // 3. Asignar sesiones a las vistas
                                 if (mTerminalViewTop != null && topSession != null) {
@@ -294,8 +296,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                 }
 
                                 // 4. Dejar la de abajo activa por defecto
-                                mTerminalView = mTerminalViewBottom;
-                                mTermuxTerminalSessionActivityClient.setCurrentSession(bottomSession);
+                                if (bottomSession != null) {
+                                    mTerminalView = mTerminalViewBottom;
+                                    mTermuxTerminalSessionActivityClient.setCurrentSession(bottomSession);
+                                } else if (topSession != null) {
+                                    mTerminalView = mTerminalViewTop;
+                                    mTermuxTerminalSessionActivityClient.setCurrentSession(topSession);
+                                }
 
                             } catch (WindowManager.BadTokenException e) {
                                 // Activity finished - ignore.
