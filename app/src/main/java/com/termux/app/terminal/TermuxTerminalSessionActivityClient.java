@@ -31,6 +31,7 @@ import com.termux.terminal.TerminalColors;
 import com.termux.terminal.TerminalSession;
 import com.termux.terminal.TerminalSessionClient;
 import com.termux.terminal.TextStyle;
+import com.termux.view.TerminalView;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -77,6 +78,12 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         // The current terminal session may have changed while being away, force
         // a refresh of the displayed terminal.
         mActivity.getTerminalView().onScreenUpdated();
+        
+        // MODIFICACIÓN: Actualizar también la vista de arriba
+        TerminalView topView = mActivity.findViewById(R.id.terminal_view_top);
+        if (topView != null) {
+            topView.onScreenUpdated();
+        }
     }
 
     /**
@@ -112,13 +119,18 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         checkForFontAndColors();
     }
 
-
-
     @Override
     public void onTextChanged(@NonNull TerminalSession changedSession) {
         if (!mActivity.isVisible()) return;
 
-        if (mActivity.getCurrentSession() == changedSession) mActivity.getTerminalView().onScreenUpdated();
+        // MODIFICACIÓN: Actualizar las DOS vistas cuando hay texto nuevo
+        TerminalView topView = mActivity.findViewById(R.id.terminal_view_top);
+        TerminalView bottomView = mActivity.getTerminalView(); // La de abajo
+
+        if (mActivity.getCurrentSession() == changedSession) {
+            if (bottomView != null) bottomView.onScreenUpdated();
+            if (topView != null) topView.onScreenUpdated();
+        }
     }
 
     @Override
@@ -254,14 +266,10 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         mActivity.getTerminalView().setTerminalCursorBlinkerState(true, true);
     }
 
-
-
     @Override
     public Integer getTerminalCursorStyle() {
         return mActivity.getProperties().getTerminalCursorStyle();
     }
-
-
 
     /** Load mBellSoundPool */
     private synchronized void loadBellSoundPool() {
@@ -287,8 +295,6 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         }
     }
 
-
-
     /** Try switching to session. */
     public void setCurrentSession(TerminalSession session) {
         if (session == null) return;
@@ -296,6 +302,12 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         if (mActivity.getTerminalView().attachSession(session)) {
             // notify about switched session if not already displaying the session
             notifyOfSessionChange();
+        }
+
+        // MODIFICACIÓN: Adjuntar la misma sesión a la vista de arriba también
+        TerminalView topView = mActivity.findViewById(R.id.terminal_view_top);
+        if (topView != null) {
+            topView.attachSession(session);
         }
 
         // We call the following even when the session is already being displayed since config may
@@ -470,7 +482,6 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         termuxSessionsListView.postDelayed(() -> termuxSessionsListView.smoothScrollToPosition(indexOfSession), 1000);
     }
 
-
     String toToastTitle(TerminalSession session) {
         TermuxService service = mActivity.getTermuxService();
         if (service == null) return null;
@@ -489,7 +500,6 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         }
         return toastTitle.toString();
     }
-
 
     public void checkForFontAndColors() {
         try {
@@ -512,6 +522,12 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
 
             final Typeface newTypeface = (fontFile.exists() && fontFile.length() > 0) ? Typeface.createFromFile(fontFile) : Typeface.MONOSPACE;
             mActivity.getTerminalView().setTypeface(newTypeface);
+            
+            // MODIFICACIÓN: Aplicar tipografía a la vista de arriba también
+            TerminalView topView = mActivity.findViewById(R.id.terminal_view_top);
+            if (topView != null) {
+                topView.setTypeface(newTypeface);
+            }
         } catch (Exception e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Error in checkForFontAndColors()", e);
         }
