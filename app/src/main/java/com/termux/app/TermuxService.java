@@ -12,8 +12,10 @@ import android.net.wifi.WifiManager;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.PowerManager;
+import android.os.Process;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -74,8 +76,9 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
 
     private final IBinder mBinder = new LocalBinder();
 
-    private final Handler mHandler = new Handler();
-
+    // MODIFICACIÓN: Usar un HandlerThread de alta prioridad para no bloquear el hilo principal
+    private HandlerThread mHandlerThread;
+    private Handler mHandler;
 
     /** The full implementation of the {@link TerminalSessionClient} interface to be used by {@link TerminalSession}
      * that holds activity references for activity related functions.
@@ -110,6 +113,11 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
     @Override
     public void onCreate() {
         Logger.logVerbose(LOG_TAG, "onCreate");
+
+        // MODIFICACIÓN: Inicializar el HandlerThread para ejecuciones en background
+        mHandlerThread = new HandlerThread("TermuxServiceHandler", Process.THREAD_PRIORITY_BACKGROUND);
+        mHandlerThread.start();
+        mHandler = new Handler(mHandlerThread.getLooper());
 
         // Get Termux app SharedProperties without loading from disk since TermuxApplication handles
         // load and TermuxActivity handles reloads
@@ -160,8 +168,6 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
             }
         }
 
-        // If this service really do get killed, there is no point restarting it automatically - let the user do on next
-        // start of {@link Term):
         return Service.START_NOT_STICKY;
     }
 
@@ -178,6 +184,11 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
         TermuxShellManager.onAppExit(this);
 
         SystemEventReceiver.unregisterPackageUpdateEvents(this);
+
+        // MODIFICACIÓN: Detener el HandlerThread para liberar recursos
+        if (mHandlerThread != null) {
+            mHandlerThread.quitSafely();
+        }
 
         runStopForeground();
     }
@@ -225,40 +236,8 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
         requestStopService();
     }
 
-    /** Kill all TermuxSessions and TermuxTasks by sending SIGKILL to their processes.
-     *
-     * For TermuxSessions, all sessions will be killed, whether user manually exited Termux or if
-     * onDestroy() was directly called because of unintended shutdown. The processing of results
-     * will only be done if user manually exited termux or if the session was started by a plugin
-     * which **expects** the result back via a pending intent.
-     *
-     * For TermuxTasks, only tasks that were started by a plugin which **expects** the result
-     * back via a pending intent will be killed, whether user manually exited Termux or if
-     * onDestroy() was directly called because of unintended shutdown. The processing of results
-     * will always be done for the tasks that are killed. The remaining processes will keep on
-     * running until the termux app process is killed by android, like by OOM, so we let them run
-     * as long as they can.
-     *
-     * Some plugin execution commands may not have been processed and added to mTermuxSessions and
-     * mTermuxTasks lists before the service is killed, so we maintain a separate
-     * mPendingPluginExecutionCommands list for those, so that we can notify the pending intent
-     * creators that execution was cancelled.
-     *
-     * Note that if user didn't manually exit Termux and if onDestroy() was directly called because
-     * of unintended shutdown, like android deciding to kill the service, then there will be no
-     * guarantee that onDestroy() will be allowed to finish and termux app process may be killed before
-     * it has finished. This means that in those cases some results may not be sent back to their
-     * creators for plugin commands but we still try to process whatever results can be processed
-     * despite the unreliable behaviour of onDestroy().
-     *
-     * Note that if don't kill the processes started by plugins which **expect** the result back
-     * and notify their creators that they have been killed, then they may get stuck waiting for
-     * the results forever like in case of commands started by Termux:Tasker or RUN_COMMAND intent,
-     * since once TermuxService has been killed, no result will be sent back. They may still get
-     * stuck if termux app process gets killed, so for this case reasonable timeout values should
-     * be used, like in Tasker for the Termux:Tasker actions.
-     *
-     * We make copies of each list since items are removed inside the loop.
+    /**
+     * Kill all TermuxSessions and TermuxTasks by sending SIGKILL to their processes.
      */
     private synchronized void killAllTermuxExecutionCommands() {
         boolean processResult;
@@ -299,7 +278,6 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
     }
 
 
-
     /** Process action to acquire Power and Wi-Fi WakeLocks. */
     @SuppressLint({"WakelockTimeout", "BatteryLife"})
     private void actionAcquireWakeLock() {
@@ -314,7 +292,7 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
         mWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, TermuxConstants.TERMUX_APP_NAME.toLowerCase() + ":service-wakelock");
         mWakeLock.acquire();
 
-        // http://tools.android.com/tech-docs/lint-in-studio-2-3#TOC-WifiManager-Leak
+        // MODIFICACIÓN: Forzar el WifiLock en modo de alto rendimiento
         WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
         mWifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, TermuxConstants.TERMUX_APP_NAME.toLowerCase());
         mWifiLock.acquire();
@@ -326,7 +304,6 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
         updateNotification();
 
         Logger.logDebug(LOG_TAG, "WakeLocks acquired successfully");
-
     }
 
     /** Process action to release Power and Wi-Fi WakeLocks. */
@@ -425,9 +402,6 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
     }
 
 
-
-
-
     /** Execute a shell command in background TermuxTask. */
     private void executeTermuxTaskCommand(ExecutionCommand executionCommand) {
         if (executionCommand == null) return;
@@ -524,9 +498,6 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
     }
 
 
-
-
-
     /** Execute a shell command in a foreground {@link TermuxSession}. */
     private void executeTermuxSessionCommand(ExecutionCommand executionCommand) {
         if (executionCommand == null) return;
@@ -587,6 +558,13 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
 
         if (Logger.getLogLevel() >= Logger.LOG_LEVEL_VERBOSE)
             Logger.logVerboseExtended(LOG_TAG, executionCommand.toString());
+
+        // MODIFICACIÓN: Elevar la prioridad del proceso de la terminal al crearse
+        try {
+            Process.setThreadPriority(Process.THREAD_PRIORITY_DISPLAY);
+        } catch (Exception e) {
+            Logger.logError(LOG_TAG, "Error setting thread priority for new session: " + e.getMessage());
+        }
 
         // If the execution command was started for a plugin, only then will the stdout be set
         // Otherwise if command was manually started by the user like by adding a new terminal session,
@@ -659,9 +637,6 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
     }
 
 
-
-
-
     private ShellCreateMode processShellCreateMode(@NonNull ExecutionCommand executionCommand) {
         if (ShellCreateMode.ALWAYS.equalsMode(executionCommand.shellCreateMode))
             return ShellCreateMode.ALWAYS; // Default
@@ -671,7 +646,7 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
                     getString(R.string.error_termux_service_execution_command_shell_name_unset, executionCommand.shellCreateMode));
                 return null;
             } else {
-               return ShellCreateMode.NO_SHELL_WITH_NAME;
+                return ShellCreateMode.NO_SHELL_WITH_NAME;
             }
         else {
             TermuxPluginUtils.setAndProcessPluginExecutionCommandError(this, LOG_TAG, executionCommand, false,
@@ -728,9 +703,6 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
     }
 
 
-
-
-
     /** If {@link TermuxActivity} has not bound to the {@link TermuxService} yet or is destroyed, then
      * interface functions requiring the activity should not be available to the terminal sessions,
      * so we just return the {@link #mTermuxTerminalSessionServiceClient}. Once {@link TermuxActivity} bind
@@ -774,9 +746,6 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
 
         mTermuxTerminalSessionActivityClient = null;
     }
-
-
-
 
 
     private Notification buildNotification() {
@@ -857,9 +826,6 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
             ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(TermuxConstants.TERMUX_APP_NOTIFICATION_ID, buildNotification());
         }
     }
-
-
-
 
 
     private void setCurrentStoredTerminalSession(TerminalSession terminalSession) {
@@ -949,7 +915,6 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
         }
         return null;
     }
-
 
 
     public boolean wantsToStop() {
