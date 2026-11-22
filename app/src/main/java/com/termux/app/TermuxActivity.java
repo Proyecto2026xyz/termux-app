@@ -56,9 +56,7 @@ import com.termux.shared.termux.theme.TermuxThemeUtils;
 import com.termux.shared.theme.NightMode;
 import com.termux.shared.view.ViewUtils;
 import com.termux.terminal.TerminalSession;
-import com.termux.terminal.TerminalSessionClient;
 import com.termux.view.TerminalView;
-import com.termux.view.TerminalViewClient;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -68,59 +66,34 @@ import androidx.viewpager.widget.ViewPager;
 
 import java.util.Arrays;
 
-/**
- * A terminal emulator activity.
- * <p/>
- * See
- * <ul>
- * <li>http://www.mongrel-phones.com.au/default/how_to_make_a_local_service_and_bind_to_it_in_android</li>
- * <li>https://code.google.com/p/android/issues/detail?id=6426</li>
- * </ul>
- * about memory leaks.
- */
 public final class TermuxActivity extends AppCompatActivity implements ServiceConnection {
 
     TermuxService mTermuxService;
 
-    // MODIFICACIÓN: Declaramos las dos vistas
     TerminalView mTerminalViewTop;
     TerminalView mTerminalViewBottom;
-    TerminalView mTerminalView; // Seguirá apuntando a la de abajo para no romper el resto del código
+    TerminalView mTerminalView; 
 
     TermuxTerminalViewClient mTermuxTerminalViewClient;
-
     TermuxTerminalSessionActivityClient mTermuxTerminalSessionActivityClient;
 
     private TermuxAppSharedPreferences mPreferences;
-
     private TermuxAppSharedProperties mProperties;
 
     TermuxActivityRootView mTermuxActivityRootView;
-
     View mTermuxActivityBottomSpaceView;
-
     ExtraKeysView mExtraKeysView;
-
     TermuxTerminalExtraKeys mTermuxTerminalExtraKeys;
-
     TermuxSessionsListViewController mTermuxSessionListViewController;
 
     private final BroadcastReceiver mTermuxActivityBroadcastReceiver = new TermuxActivityBroadcastReceiver();
-
     Toast mLastToast;
-
     private boolean mIsVisible;
-
     private boolean mIsOnResumeAfterOnCreate = false;
-
     private boolean mIsActivityRecreated = false;
-
     private boolean mIsInvalidState;
-
     private int mNavBarHeight;
-
     private float mTerminalToolbarDefaultHeight;
-
 
     private static final int CONTEXT_MENU_SELECT_URL_ID = 0;
     private static final int CONTEXT_MENU_SHARE_TRANSCRIPT_ID = 1;
@@ -137,14 +110,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private static final String ARG_TERMINAL_TOOLBAR_TEXT_INPUT = "terminal_toolbar_text_input";
     private static final String ARG_ACTIVITY_RECREATED = "activity_recreated";
-
     private static final String LOG_TAG = "TermuxActivity";
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         Logger.logDebug(LOG_TAG, "onCreate");
         
-        // MODIFICACIÓN: Elevar prioridad del proceso principal para UI fluida
         try {
             Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_DISPLAY);
         } catch (Exception e) {
@@ -156,20 +127,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (savedInstanceState != null)
             mIsActivityRecreated = savedInstanceState.getBoolean(ARG_ACTIVITY_RECREATED, false);
 
-        // Delete ReportInfo serialized object files from cache older than 14 days
         ReportActivity.deleteReportInfoFilesOlderThanXDays(this, 14, false);
 
-        // Load Termux app SharedProperties from disk
         mProperties = TermuxAppSharedProperties.getProperties();
         reloadProperties();
-
         setActivityTheme();
 
         super.onCreate(savedInstanceState);
-
         setContentView(R.layout.activity_termux);
 
-        // Load termux shared preferences
         mPreferences = TermuxAppSharedPreferences.build(this, true);
         if (mPreferences == null) {
             mIsInvalidState = true;
@@ -194,27 +160,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         setTermuxTerminalViewAndClients();
-
         setTerminalToolbarView(savedInstanceState);
-
         setSettingsButtonView();
-
         setNewSessionButtonView();
-
         setToggleKeyboardView();
 
-        // Registramos el menú contextual en la vista principal (abajo)
         registerForContextMenu(mTerminalView);
-
         FileReceiverActivity.updateFileReceiverActivityComponentsState(this);
 
         try {
-            // Start the {@link TermuxService} and make it run regardless of who is bound to it
             Intent serviceIntent = new Intent(this, TermuxService.class);
             startService(serviceIntent);
 
-            // Attempt to bind to the service, this will call the {@link #onServiceConnected(ComponentName, IBinder)}
-            // callback if it succeeds.
             if (!bindService(serviceIntent, this, 0))
                 throw new RuntimeException("bindService() failed");
         } catch (Exception e) {
@@ -227,40 +184,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
 
-        // Send the {@link TermuxConstants#BROADCAST_TERMUX_OPENED} broadcast to notify apps that Termux
-        // app has been opened.
         TermuxUtils.sendTermuxOpenedBroadcast(this);
     }
 
     @Override
     public void onStart() {
         super.onStart();
-
-        Logger.logDebug(LOG_TAG, "onStart");
-
         if (mIsInvalidState) return;
-
         mIsVisible = true;
-
-        if (mTermuxTerminalSessionActivityClient != null)
-            mTermuxTerminalSessionActivityClient.onStart();
-
-        if (mTermuxTerminalViewClient != null)
-            mTermuxTerminalViewClient.onStart();
-
-        if (mPreferences.isTerminalMarginAdjustmentEnabled())
-            addTermuxActivityRootViewGlobalLayoutListener();
-
+        if (mTermuxTerminalSessionActivityClient != null) mTermuxTerminalSessionActivityClient.onStart();
+        if (mTermuxTerminalViewClient != null) mTermuxTerminalViewClient.onStart();
+        if (mPreferences.isTerminalMarginAdjustmentEnabled()) addTermuxActivityRootViewGlobalLayoutListener();
         registerTermuxActivityBroadcastReceiver();
     }
 
     @Override
     public void onResume() {
         super.onResume();
-
-        Logger.logVerbose(LOG_TAG, "onResume");
-
-        // MODIFICACIÓN 2 (SEGURIDAD): ACTIVAR FLAG_SECURE DE FORMA SEGURA
         runOnUiThread(() -> {
             try {
                 getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
@@ -270,36 +210,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         });
 
         if (mIsInvalidState) return;
-
-        if (mTermuxTerminalSessionActivityClient != null)
-            mTermuxTerminalSessionActivityClient.onResume();
-
-        if (mTermuxTerminalViewClient != null)
-            mTermuxTerminalViewClient.onResume();
-
+        if (mTermuxTerminalSessionActivityClient != null) mTermuxTerminalSessionActivityClient.onResume();
+        if (mTermuxTerminalViewClient != null) mTermuxTerminalViewClient.onResume();
         TermuxCrashUtils.notifyAppCrashFromCrashLogFile(this, LOG_TAG);
-
         mIsOnResumeAfterOnCreate = false;
     }
 
     @Override
     protected void onStop() {
         super.onStop();
-
-        Logger.logDebug(LOG_TAG, "onStop");
-
         if (mIsInvalidState) return;
-
         mIsVisible = false;
-
-        if (mTermuxTerminalSessionActivityClient != null)
-            mTermuxTerminalSessionActivityClient.onStop();
-
-        if (mTermuxTerminalViewClient != null)
-            mTermuxTerminalViewClient.onStop();
-
+        if (mTermuxTerminalSessionActivityClient != null) mTermuxTerminalSessionActivityClient.onStop();
+        if (mTermuxTerminalViewClient != null) mTermuxTerminalViewClient.onStop();
         removeTermuxActivityRootViewGlobalLayoutListener();
-
         unregisterTermuxActivityBroadcastReceiver();
         getDrawer().closeDrawers();
     }
@@ -307,39 +231,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     public void onDestroy() {
         super.onDestroy();
-
-        Logger.logDebug(LOG_TAG, "onDestroy");
-
         if (mIsInvalidState) return;
-
         if (mTermuxService != null) {
             mTermuxService.unsetTermuxTerminalSessionClient();
             mTermuxService = null;
         }
-
-        try {
-            unbindService(this);
-        } catch (Exception e) {
-            // ignore.
-        }
+        try { unbindService(this); } catch (Exception e) { }
     }
 
     @Override
     public void onSaveInstanceState(@NonNull Bundle savedInstanceState) {
-        Logger.logVerbose(LOG_TAG, "onSaveInstanceState");
-
         super.onSaveInstanceState(savedInstanceState);
         saveTerminalToolbarTextInput(savedInstanceState);
         savedInstanceState.putBoolean(ARG_ACTIVITY_RECREATED, true);
     }
 
-
     @Override
     public void onServiceConnected(ComponentName componentName, IBinder service) {
-        Logger.logDebug(LOG_TAG, "onServiceConnected");
-
         mTermuxService = ((TermuxService.LocalBinder) service).service;
-
         setTermuxSessionsListView();
 
         final Intent intent = getIntent();
@@ -347,17 +256,47 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         if (mTermuxService.isTermuxSessionsEmpty()) {
             if (mIsVisible) {
-                // MODIFICACIÓN: Ejecutar el bootstrap en un hilo separado para no congelar la UI
                 new Thread(() -> {
                     TermuxInstaller.setupBootstrapIfNeeded(TermuxActivity.this, () -> {
-                        if (mTermuxService == null) return; // Activity might have been destroyed.
+                        if (mTermuxService == null) return; 
                         runOnUiThread(() -> {
                             try {
                                 boolean launchFailsafe = false;
                                 if (intent != null && intent.getExtras() != null) {
                                     launchFailsafe = intent.getExtras().getBoolean(TERMUX_ACTIVITY.EXTRA_FAILSAFE_SESSION, false);
                                 }
-                                mTermuxTerminalSessionActivityClient.addNewSession(launchFailsafe, null);
+                                
+                                // 1. Crear sesión superior
+                                mTermuxTerminalSessionActivityClient.addNewSession(launchFailsafe, "Sesión Top");
+                                TerminalSession topSession = mTermuxTerminalSessionActivityClient.getCurrentSession();
+
+                                // 2. Crear sesión inferior
+                                mTermuxTerminalSessionActivityClient.addNewSession(launchFailsafe, "Sesión Bottom");
+                                TerminalSession bottomSession = mTermuxTerminalSessionActivityClient.getCurrentSession();
+
+                                // 3. Asignar sesiones a las vistas
+                                if (mTerminalViewTop != null && topSession != null) {
+                                    mTerminalViewTop.attachSession(topSession);
+                                    mTerminalViewTop.setOnClickListener(v -> {
+                                        mTerminalView = mTerminalViewTop;
+                                        mTerminalViewTop.requestFocus();
+                                        mTermuxTerminalSessionActivityClient.setCurrentSession(topSession);
+                                    });
+                                }
+                                
+                                if (mTerminalViewBottom != null && bottomSession != null) {
+                                    mTerminalViewBottom.attachSession(bottomSession);
+                                    mTerminalViewBottom.setOnClickListener(v -> {
+                                        mTerminalView = mTerminalViewBottom;
+                                        mTerminalViewBottom.requestFocus();
+                                        mTermuxTerminalSessionActivityClient.setCurrentSession(bottomSession);
+                                    });
+                                }
+
+                                // 4. Dejar la de abajo activa por defecto
+                                mTerminalView = mTerminalViewBottom;
+                                mTermuxTerminalSessionActivityClient.setCurrentSession(bottomSession);
+
                             } catch (WindowManager.BadTokenException e) {
                                 // Activity finished - ignore.
                             }
@@ -365,7 +304,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     });
                 }).start();
             } else {
-                // The service connected while not in foreground - just bail out.
                 finishActivityIfNotFinishing();
             }
         } else {
@@ -377,24 +315,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
 
-        // Update the {@link TerminalSession} and {@link TerminalEmulator} clients.
         mTermuxService.setTermuxTerminalSessionClient(mTermuxTerminalSessionActivityClient);
     }
 
     @Override
     public void onServiceDisconnected(ComponentName name) {
-        Logger.logDebug(LOG_TAG, "onServiceDisconnected");
         finishActivityIfNotFinishing();
     }
 
-
     private void reloadProperties() {
         mProperties.loadTermuxPropertiesFromDisk();
-
-        if (mTermuxTerminalViewClient != null)
-            mTermuxTerminalViewClient.onReloadProperties();
+        if (mTermuxTerminalViewClient != null) mTermuxTerminalViewClient.onReloadProperties();
     }
-
 
     private void setActivityTheme() {
         TermuxThemeUtils.setAppNightMode(mProperties.getNightMode());
@@ -408,7 +340,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ViewUtils.setLayoutMarginsInDp(relativeLayout, marginHorizontal, marginVertical, marginHorizontal, marginVertical);
     }
 
-
     public void addTermuxActivityRootViewGlobalLayoutListener() {
         getTermuxActivityRootView().getViewTreeObserver().addOnGlobalLayoutListener(getTermuxActivityRootView());
     }
@@ -418,50 +349,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             getTermuxActivityRootView().getViewTreeObserver().removeOnGlobalLayoutListener(getTermuxActivityRootView());
     }
 
-
     private void setTermuxTerminalViewAndClients() {
-        // Set termux terminal view and session clients
         mTermuxTerminalSessionActivityClient = new TermuxTerminalSessionActivityClient(this);
         mTermuxTerminalViewClient = new TermuxTerminalViewClient(this, mTermuxTerminalSessionActivityClient);
 
-        // MODIFICACIÓN: Inicializar las dos vistas del XML
         mTerminalViewTop = findViewById(R.id.terminal_view_top);
         mTerminalViewBottom = findViewById(R.id.terminal_view_bottom);
         
-        // Asignamos la vista de abajo como la principal para que el teclado funcione ahí
         mTerminalView = mTerminalViewBottom;
 
         if (mTerminalViewTop != null) {
             mTerminalViewTop.setTerminalViewClient(mTermuxTerminalViewClient);
-            mTerminalViewTop.setTextSize(12); // Inicializar el renderizador
-            // MODIFICACIÓN: Listener para cambiar el foco a la vista de arriba al tocarla
-            mTerminalViewTop.setOnClickListener(v -> {
-                mTerminalView = mTerminalViewTop;
-                mTerminalViewTop.requestFocus();
-            });
-            mTerminalViewTop.setOnFocusChangeListener((v, hasFocus) -> {
-                if (hasFocus) mTerminalView = mTerminalViewTop;
-            });
+            mTerminalViewTop.setTextSize(12); 
         }
 
         if (mTerminalViewBottom != null) {
             mTerminalViewBottom.setTerminalViewClient(mTermuxTerminalViewClient);
-            mTerminalViewBottom.setTextSize(12); // Inicializar el renderizador
-            // MODIFICACIÓN: Listener para cambiar el foco a la vista de abajo al tocarla
-            mTerminalViewBottom.setOnClickListener(v -> {
-                mTerminalView = mTerminalViewBottom;
-                mTerminalViewBottom.requestFocus();
-            });
-            mTerminalViewBottom.setOnFocusChangeListener((v, hasFocus) -> {
-                if (hasFocus) mTerminalView = mTerminalViewBottom;
-            });
+            mTerminalViewBottom.setTextSize(12);
         }
 
-        if (mTermuxTerminalViewClient != null)
-            mTermuxTerminalViewClient.onCreate();
-
-        if (mTermuxTerminalSessionActivityClient != null)
-            mTermuxTerminalSessionActivityClient.onCreate();
+        if (mTermuxTerminalViewClient != null) mTermuxTerminalViewClient.onCreate();
+        if (mTermuxTerminalSessionActivityClient != null) mTermuxTerminalSessionActivityClient.onCreate();
     }
 
     private void setTermuxSessionsListView() {
@@ -471,7 +379,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         termuxSessionsListView.setOnItemClickListener(mTermuxSessionListViewController);
         termuxSessionsListView.setOnItemLongClickListener(mTermuxSessionListViewController);
     }
-
 
     private void setTerminalToolbarView(Bundle savedInstanceState) {
         mTermuxTerminalExtraKeys = new TermuxTerminalExtraKeys(this, mTerminalView,
@@ -526,7 +433,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-
     private void setSettingsButtonView() {
         ImageButton settingsButton = findViewById(R.id.settings_button);
         settingsButton.setOnClickListener(v -> {
@@ -558,7 +464,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         });
     }
 
-
     @SuppressLint("RtlHardcoded")
     @Override
     public void onBackPressed() {
@@ -582,7 +487,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mLastToast.setGravity(Gravity.TOP, 0, 0);
         mLastToast.show();
     }
-
 
     @Override
     public void onCreateContextMenu(ContextMenu menu, View v, ContextMenuInfo menuInfo) {
@@ -712,7 +616,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-
     public void requestStoragePermission(boolean isPermissionCallback) {
         new Thread() {
             @Override
@@ -738,7 +641,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        Logger.logVerbose(LOG_TAG, "onActivityResult: requestCode: " + requestCode + ", resultCode: "  + resultCode + ", data: "  + IntentUtils.getIntentString(data));
         if (requestCode == PermissionUtils.REQUEST_GRANT_STORAGE_PERMISSION) {
             requestStoragePermission(true);
         }
@@ -747,91 +649,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        Logger.logVerbose(LOG_TAG, "onRequestPermissionsResult: requestCode: " + requestCode + ", permissions: " + Arrays.toString(permissions) + ", grantResults: " + Arrays.toString(grantResults));
         if (requestCode == PermissionUtils.REQUEST_GRANT_STORAGE_PERMISSION) {
             requestStoragePermission(true);
         }
     }
 
+    public int getNavBarHeight() { return mNavBarHeight; }
+    public TermuxActivityRootView getTermuxActivityRootView() { return mTermuxActivityRootView; }
+    public View getTermuxActivityBottomSpaceView() { return mTermuxActivityBottomSpaceView; }
+    public ExtraKeysView getExtraKeysView() { return mExtraKeysView; }
+    public TermuxTerminalExtraKeys getTermuxTerminalExtraKeys() { return mTermuxTerminalExtraKeys; }
+    public void setExtraKeysView(ExtraKeysView extraKeysView) { mExtraKeysView = extraKeysView; }
+    public DrawerLayout getDrawer() { return (DrawerLayout) findViewById(R.id.drawer_layout); }
+    public ViewPager getTerminalToolbarViewPager() { return (ViewPager) findViewById(R.id.terminal_toolbar_view_pager); }
+    public float getTerminalToolbarDefaultHeight() { return mTerminalToolbarDefaultHeight; }
+    public boolean isTerminalViewSelected() { return getTerminalToolbarViewPager().getCurrentItem() == 0; }
+    public boolean isTerminalToolbarTextInputViewSelected() { return getTerminalToolbarViewPager().getCurrentItem() == 1; }
 
-    public int getNavBarHeight() {
-        return mNavBarHeight;
-    }
+    public void termuxSessionListNotifyUpdated() { mTermuxSessionListViewController.notifyDataSetChanged(); }
+    public boolean isVisible() { return mIsVisible; }
+    public boolean isOnResumeAfterOnCreate() { return mIsOnResumeAfterOnCreate; }
+    public boolean isActivityRecreated() { return mIsActivityRecreated; }
+    public TermuxService getTermuxService() { return mTermuxService; }
+    
+    public TerminalView getTerminalView() { return mTerminalView; }
+    public TerminalView getTerminalViewTop() { return mTerminalViewTop; }
+    public TerminalView getTerminalViewBottom() { return mTerminalViewBottom; }
 
-    public TermuxActivityRootView getTermuxActivityRootView() {
-        return mTermuxActivityRootView;
-    }
-
-    public View getTermuxActivityBottomSpaceView() {
-        return mTermuxActivityBottomSpaceView;
-    }
-
-    public ExtraKeysView getExtraKeysView() {
-        return mExtraKeysView;
-    }
-
-    public TermuxTerminalExtraKeys getTermuxTerminalExtraKeys() {
-        return mTermuxTerminalExtraKeys;
-    }
-
-    public void setExtraKeysView(ExtraKeysView extraKeysView) {
-        mExtraKeysView = extraKeysView;
-    }
-
-    public DrawerLayout getDrawer() {
-        return (DrawerLayout) findViewById(R.id.drawer_layout);
-    }
-
-
-    public ViewPager getTerminalToolbarViewPager() {
-        return (ViewPager) findViewById(R.id.terminal_toolbar_view_pager);
-    }
-
-    public float getTerminalToolbarDefaultHeight() {
-        return mTerminalToolbarDefaultHeight;
-    }
-
-    public boolean isTerminalViewSelected() {
-        return getTerminalToolbarViewPager().getCurrentItem() == 0;
-    }
-
-    public boolean isTerminalToolbarTextInputViewSelected() {
-        return getTerminalToolbarViewPager().getCurrentItem() == 1;
-    }
-
-
-    public void termuxSessionListNotifyUpdated() {
-        mTermuxSessionListViewController.notifyDataSetChanged();
-    }
-
-    public boolean isVisible() {
-        return mIsVisible;
-    }
-
-    public boolean isOnResumeAfterOnCreate() {
-        return mIsOnResumeAfterOnCreate;
-    }
-
-    public boolean isActivityRecreated() {
-        return mIsActivityRecreated;
-    }
-
-
-    public TermuxService getTermuxService() {
-        return mTermuxService;
-    }
-
-    public TerminalView getTerminalView() {
-        return mTerminalView;
-    }
-
-    public TermuxTerminalViewClient getTermuxTerminalViewClient() {
-        return mTermuxTerminalViewClient;
-    }
-
-    public TermuxTerminalSessionActivityClient getTermuxTerminalSessionClient() {
-        return mTermuxTerminalSessionActivityClient;
-    }
+    public TermuxTerminalViewClient getTermuxTerminalViewClient() { return mTermuxTerminalViewClient; }
+    public TermuxTerminalSessionActivityClient getTermuxTerminalSessionClient() { return mTermuxTerminalSessionActivityClient; }
 
     @Nullable
     public TerminalSession getCurrentSession() {
@@ -841,14 +687,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return null;
     }
 
-    public TermuxAppSharedPreferences getPreferences() {
-        return mPreferences;
-    }
-
-    public TermuxAppSharedProperties getProperties() {
-        return mProperties;
-    }
-
+    public TermuxAppSharedPreferences getPreferences() { return mPreferences; }
+    public TermuxAppSharedProperties getProperties() { return mProperties; }
 
     public static void updateTermuxActivityStyling(Context context, boolean recreateActivity) {
         Intent stylingIntent = new Intent(TERMUX_ACTIVITY.ACTION_RELOAD_STYLE);
@@ -861,7 +701,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         intentFilter.addAction(TERMUX_ACTIVITY.ACTION_NOTIFY_APP_CRASH);
         intentFilter.addAction(TERMUX_ACTIVITY.ACTION_RELOAD_STYLE);
         intentFilter.addAction(TERMUX_ACTIVITY.ACTION_REQUEST_PERMISSIONS);
-
         registerReceiver(mTermuxActivityBroadcastReceiver, intentFilter);
     }
 
@@ -871,7 +710,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void fixTermuxActivityBroadcastReceiverIntent(Intent intent) {
         if (intent == null) return;
-
         String extraReloadStyle = intent.getStringExtra(TERMUX_ACTIVITY.EXTRA_RELOAD_STYLE);
         if ("storage".equals(extraReloadStyle)) {
             intent.removeExtra(TERMUX_ACTIVITY.EXTRA_RELOAD_STYLE);
@@ -883,21 +721,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override
         public void onReceive(Context context, Intent intent) {
             if (intent == null) return;
-
             if (mIsVisible) {
                 fixTermuxActivityBroadcastReceiverIntent(intent);
-
                 switch (intent.getAction()) {
                     case TERMUX_ACTIVITY.ACTION_NOTIFY_APP_CRASH:
-                        Logger.logDebug(LOG_TAG, "Received intent to notify app crash");
                         TermuxCrashUtils.notifyAppCrashFromCrashLogFile(context, LOG_TAG);
                         return;
                     case TERMUX_ACTIVITY.ACTION_RELOAD_STYLE:
-                        Logger.logDebug(LOG_TAG, "Received intent to reload styling");
                         reloadActivityStyling(intent.getBooleanExtra(TERMUX_ACTIVITY.EXTRA_RECREATE_ACTIVITY, true));
                         return;
                     case TERMUX_ACTIVITY.ACTION_REQUEST_PERMISSIONS:
-                        Logger.logDebug(LOG_TAG, "Received intent to request storage permissions");
                         requestStoragePermission(false);
                         return;
                     default:
@@ -909,32 +742,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void reloadActivityStyling(boolean recreateActivity) {
         if (mProperties != null) {
             reloadProperties();
-
             if (mExtraKeysView != null) {
                 mExtraKeysView.setButtonTextAllCaps(mProperties.shouldExtraKeysTextBeAllCaps());
                 mExtraKeysView.reload(mTermuxTerminalExtraKeys.getExtraKeysInfo(), mTerminalToolbarDefaultHeight);
             }
-
             TermuxThemeUtils.setAppNightMode(mProperties.getNightMode());
         }
-
         setMargins();
         setTerminalToolbarHeight();
-
         FileReceiverActivity.updateFileReceiverActivityComponentsState(this);
-
-        if (mTermuxTerminalSessionActivityClient != null)
-            mTermuxTerminalSessionActivityClient.onReloadActivityStyling();
-
-        if (mTermuxTerminalViewClient != null)
-            mTermuxTerminalViewClient.onReloadActivityStyling();
-
+        if (mTermuxTerminalSessionActivityClient != null) mTermuxTerminalSessionActivityClient.onReloadActivityStyling();
+        if (mTermuxTerminalViewClient != null) mTermuxTerminalViewClient.onReloadActivityStyling();
         if (recreateActivity) {
-            Logger.logDebug(LOG_TAG, "Recreating activity");
             TermuxActivity.this.recreate();
         }
     }
-
 
     public static void startTermuxActivity(@NonNull final Context context) {
         ActivityUtils.startActivity(context, newInstance(context));
@@ -945,5 +767,4 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         return intent;
     }
-
 }
