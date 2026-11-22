@@ -272,7 +272,10 @@ final class TermuxInstaller {
                             pb.environment().put("LD_LIBRARY_PATH", PREFIX + "/lib");
                             pb.redirectErrorStream(true);
                             
-                            Process process = pb.start();
+                            // =========================================================
+                            // CORRECCIÓN: Usar java.lang.Process para evitar conflicto
+                            // =========================================================
+                            java.lang.Process process = pb.start();
                             
                             BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
                             String line;
