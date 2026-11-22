@@ -12,6 +12,7 @@ import android.content.ServiceConnection;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.os.Process;
 import android.view.ContextMenu;
 import android.view.ContextMenu.ContextMenuInfo;
 import android.view.Gravity;
@@ -79,96 +80,38 @@ import java.util.Arrays;
  */
 public final class TermuxActivity extends AppCompatActivity implements ServiceConnection {
 
-    /**
-     * The connection to the {@link TermuxService}. Requested in {@link #onCreate(Bundle)} with a call to
-     * {@link #bindService(Intent, ServiceConnection, int)}, and obtained and stored in
-     * {@link #onServiceConnected(ComponentName, IBinder)}.
-     */
     TermuxService mTermuxService;
 
-    /**
-     * The {@link TerminalView} shown in  {@link TermuxActivity} that displays the terminal.
-     */
     TerminalView mTerminalView;
 
-    /**
-     *  The {@link TerminalViewClient} interface implementation to allow for communication between
-     *  {@link TerminalView} and {@link TermuxActivity}.
-     */
     TermuxTerminalViewClient mTermuxTerminalViewClient;
 
-    /**
-     *  The {@link TerminalSessionClient} interface implementation to allow for communication between
-     *  {@link TerminalSession} and {@link TermuxActivity}.
-     */
     TermuxTerminalSessionActivityClient mTermuxTerminalSessionActivityClient;
 
-    /**
-     * Termux app shared preferences manager.
-     */
     private TermuxAppSharedPreferences mPreferences;
 
-    /**
-     * Termux app SharedProperties loaded from termux.properties
-     */
     private TermuxAppSharedProperties mProperties;
 
-    /**
-     * The root view of the {@link TermuxActivity}.
-     */
     TermuxActivityRootView mTermuxActivityRootView;
 
-    /**
-     * The space at the bottom of {@link @mTermuxActivityRootView} of the {@link TermuxActivity}.
-     */
     View mTermuxActivityBottomSpaceView;
 
-    /**
-     * The terminal extra keys view.
-     */
     ExtraKeysView mExtraKeysView;
 
-    /**
-     * The client for the {@link #mExtraKeysView}.
-     */
     TermuxTerminalExtraKeys mTermuxTerminalExtraKeys;
 
-    /**
-     * The termux sessions list controller.
-     */
     TermuxSessionsListViewController mTermuxSessionListViewController;
 
-    /**
-     * The {@link TermuxActivity} broadcast receiver for various things like terminal style configuration changes.
-     */
     private final BroadcastReceiver mTermuxActivityBroadcastReceiver = new TermuxActivityBroadcastReceiver();
 
-    /**
-     * The last toast shown, used cancel current toast before showing new in {@link #showToast(String, boolean)}.
-     */
     Toast mLastToast;
 
-    /**
-     * If between onResume() and onStop(). Note that only one session is in the foreground of the terminal view at the
-     * time, so if the session causing a change is not in the foreground it should probably be treated as background.
-     */
     private boolean mIsVisible;
 
-    /**
-     * If onResume() was called after onCreate().
-     */
     private boolean mIsOnResumeAfterOnCreate = false;
 
-    /**
-     * If activity was restarted like due to call to {@link #recreate()} after receiving
-     * {@link TERMUX_ACTIVITY#ACTION_RELOAD_STYLE}, system dark night mode was changed or activity
-     * was killed by android.
-     */
     private boolean mIsActivityRecreated = false;
 
-    /**
-     * The {@link TermuxActivity} is in an invalid state and must not be run.
-     */
     private boolean mIsInvalidState;
 
     private int mNavBarHeight;
@@ -197,6 +140,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     public void onCreate(Bundle savedInstanceState) {
         Logger.logDebug(LOG_TAG, "onCreate");
+        
+        // MODIFICACIÓN 1: Elevar prioridad del proceso principal para UI fluida
+        try {
+            Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_DISPLAY);
+        } catch (Exception e) {
+            Logger.logError(LOG_TAG, "Error setting thread priority: " + e.getMessage());
+        }
+
+        // =========================================================
+        // MODIFICACIÓN 2 (SEGURIDAD): ACTIVAR FLAG_SECURE
+        // Esto evita capturas de pantalla, grabaciones y vistas previas en la multitarea.
+        // =========================================================
+        getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
+
         mIsOnResumeAfterOnCreate = true;
 
         if (savedInstanceState != null)
@@ -375,14 +332,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
 
-
-
-
-    /**
-     * Part of the {@link ServiceConnection} interface. The service is bound with
-     * {@link #bindService(Intent, ServiceConnection, int)} in {@link #onCreate(Bundle)} which will cause a call to this
-     * callback method.
-     */
     @Override
     public void onServiceConnected(ComponentName componentName, IBinder service) {
         Logger.logDebug(LOG_TAG, "onServiceConnected");
@@ -396,18 +345,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         if (mTermuxService.isTermuxSessionsEmpty()) {
             if (mIsVisible) {
-                TermuxInstaller.setupBootstrapIfNeeded(TermuxActivity.this, () -> {
-                    if (mTermuxService == null) return; // Activity might have been destroyed.
-                    try {
-                        boolean launchFailsafe = false;
-                        if (intent != null && intent.getExtras() != null) {
-                            launchFailsafe = intent.getExtras().getBoolean(TERMUX_ACTIVITY.EXTRA_FAILSAFE_SESSION, false);
-                        }
-                        mTermuxTerminalSessionActivityClient.addNewSession(launchFailsafe, null);
-                    } catch (WindowManager.BadTokenException e) {
-                        // Activity finished - ignore.
-                    }
-                });
+                // MODIFICACIÓN: Ejecutar el bootstrap en un hilo separado para no congelar la UI
+                new Thread(() -> {
+                    TermuxInstaller.setupBootstrapIfNeeded(TermuxActivity.this, () -> {
+                        if (mTermuxService == null) return; // Activity might have been destroyed.
+                        runOnUiThread(() -> {
+                            try {
+                                boolean launchFailsafe = false;
+                                if (intent != null && intent.getExtras() != null) {
+                                    launchFailsafe = intent.getExtras().getBoolean(TERMUX_ACTIVITY.EXTRA_FAILSAFE_SESSION, false);
+                                }
+                                mTermuxTerminalSessionActivityClient.addNewSession(launchFailsafe, null);
+                            } catch (WindowManager.BadTokenException e) {
+                                // Activity finished - ignore.
+                            }
+                        });
+                    });
+                }).start();
             } else {
                 // The service connected while not in foreground - just bail out.
                 finishActivityIfNotFinishing();
@@ -438,17 +392,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
 
-
-
-
-
     private void reloadProperties() {
         mProperties.loadTermuxPropertiesFromDisk();
 
         if (mTermuxTerminalViewClient != null)
             mTermuxTerminalViewClient.onReloadProperties();
     }
-
 
 
     private void setActivityTheme() {
@@ -469,7 +418,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
 
-
     public void addTermuxActivityRootViewGlobalLayoutListener() {
         getTermuxActivityRootView().getViewTreeObserver().addOnGlobalLayoutListener(getTermuxActivityRootView());
     }
@@ -478,7 +426,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (getTermuxActivityRootView() != null)
             getTermuxActivityRootView().getViewTreeObserver().removeOnGlobalLayoutListener(getTermuxActivityRootView());
     }
-
 
 
     private void setTermuxTerminalViewAndClients() {
@@ -504,7 +451,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         termuxSessionsListView.setOnItemClickListener(mTermuxSessionListViewController);
         termuxSessionsListView.setOnItemLongClickListener(mTermuxSessionListViewController);
     }
-
 
 
     private void setTerminalToolbarView(Bundle savedInstanceState) {
@@ -562,7 +508,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
 
-
     private void setSettingsButtonView() {
         ImageButton settingsButton = findViewById(R.id.settings_button);
         settingsButton.setOnClickListener(v -> {
@@ -595,9 +540,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
 
-
-
-
     @SuppressLint("RtlHardcoded")
     @Override
     public void onBackPressed() {
@@ -623,7 +565,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mLastToast.setGravity(Gravity.TOP, 0, 0);
         mLastToast.show();
     }
-
 
 
     @Override
@@ -759,7 +700,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
 
-
     /**
      * For processes to access primary external storage (/sdcard, /storage/emulated/0, ~/storage/shared),
      * termux needs to be granted legacy WRITE_EXTERNAL_STORAGE or MANAGE_EXTERNAL_STORAGE permissions
@@ -801,12 +741,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        Logger.logVerbose(LOG_TAG, "onRequestPermissionsResult: requestCode: " + requestCode + ", permissions: "  + Arrays.toString(permissions) + ", grantResults: "  + Arrays.toString(grantResults));
+        Logger.logVerbose(LOG_TAG, "onRequestPermissionsResult: requestCode: " + requestCode + ", permissions: " + Arrays.toString(permissions) + ", grantResults: " + Arrays.toString(grantResults));
         if (requestCode == PermissionUtils.REQUEST_GRANT_STORAGE_PERMISSION) {
             requestStoragePermission(true);
         }
     }
-
 
 
     public int getNavBarHeight() {
@@ -872,7 +811,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
 
-
     public TermuxService getTermuxService() {
         return mTermuxService;
     }
@@ -904,8 +842,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public TermuxAppSharedProperties getProperties() {
         return mProperties;
     }
-
-
 
 
     public static void updateTermuxActivityStyling(Context context, boolean recreateActivity) {
@@ -997,7 +933,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             TermuxActivity.this.recreate();
         }
     }
-
 
 
     public static void startTermuxActivity(@NonNull final Context context) {
