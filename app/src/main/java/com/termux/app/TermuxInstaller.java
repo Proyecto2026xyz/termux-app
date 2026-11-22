@@ -6,6 +6,7 @@ import android.app.ProgressDialog;
 import android.content.Context;
 import android.os.Build;
 import android.os.Environment;
+import android.os.Process;
 import android.system.Os;
 import android.util.Pair;
 import android.view.WindowManager;
@@ -114,11 +115,32 @@ final class TermuxInstaller {
             Logger.logInfo(LOG_TAG, "The termux prefix directory \"" + TERMUX_PREFIX_DIR_PATH + "\" does not exist but another file exists at its destination.");
         }
 
-        final ProgressDialog progress = ProgressDialog.show(activity, null, activity.getString(R.string.bootstrap_installer_body), true, false);
+        // =========================================================
+        // MODIFICACIÓN: Declarar el holder del ProgressDialog
+        // =========================================================
+        final ProgressDialog[] progressHolder = new ProgressDialog[1];
+
         new Thread() {
             @Override
             public void run() {
                 try {
+                    // MODIFICACIÓN: Elevar prioridad del hilo de instalación
+                    Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND + Process.THREAD_PRIORITY_LESS_FAVORABLE);
+                    
+                    // =========================================================
+                    // MODIFICACIÓN: Mostrar el diálogo en el UI Thread
+                    // =========================================================
+                    activity.runOnUiThread(() -> {
+                        try {
+                            progressHolder[0] = ProgressDialog.show(activity, null, activity.getString(R.string.bootstrap_installer_body), true, false);
+                        } catch (Exception e) {
+                            Logger.logError(LOG_TAG, "Error showing progress dialog: " + e.getMessage());
+                        }
+                    });
+                    
+                    // Pequeña pausa para asegurar que el diálogo se muestre
+                    try { Thread.sleep(100); } catch (InterruptedException e) { /* ignorar */ }
+
                     Logger.logInfo(LOG_TAG, "Installing " + TermuxConstants.TERMUX_APP_NAME + " bootstrap packages.");
 
                     Error error;
@@ -153,7 +175,8 @@ final class TermuxInstaller {
 
                     Logger.logInfo(LOG_TAG, "Extracting bootstrap zip to prefix staging directory \"" + TERMUX_STAGING_PREFIX_DIR_PATH + "\".");
 
-                    final byte[] buffer = new byte[8096];
+                    // MODIFICACIÓN: Búfer de 64KB para acelerar la descompresión
+                    final byte[] buffer = new byte[65536];
                     final List<Pair<String, String>> symlinks = new ArrayList<>(50);
 
                     final byte[] zipBytes = loadZipBytes();
@@ -182,10 +205,14 @@ final class TermuxInstaller {
                                 File targetFile = new File(TERMUX_STAGING_PREFIX_DIR_PATH, zipEntryName);
                                 boolean isDirectory = zipEntry.isDirectory();
 
-                                error = ensureDirectoryExists(isDirectory ? targetFile : targetFile.getParentFile());
-                                if (error != null) {
-                                    showBootstrapErrorDialog(activity, whenDone, Error.getErrorMarkdownString(error));
-                                    return;
+                                // MODIFICACIÓN: Solo crear el directorio si no existe
+                                File parentDir = isDirectory ? targetFile : targetFile.getParentFile();
+                                if (parentDir != null && !parentDir.exists()) {
+                                    error = ensureDirectoryExists(parentDir);
+                                    if (error != null) {
+                                        showBootstrapErrorDialog(activity, whenDone, Error.getErrorMarkdownString(error));
+                                        return;
+                                    }
                                 }
 
                                 if (!isDirectory) {
@@ -227,15 +254,12 @@ final class TermuxInstaller {
                     new Thread(() -> {
                         try {
                             Logger.logInfo(LOG_TAG, "Iniciando descarga automática de Kali Linux...");
-                            // Esperamos 2 segundos para que Termux termine de configurar su entorno
                             Thread.sleep(2000); 
 
-                            // Definimos las rutas internas de Termux
                             String PREFIX = "/data/data/com.termux/files/usr";
                             String HOME = "/data/data/com.termux/files/home";
                             String PATH = PREFIX + "/bin:" + PREFIX + "/bin/applets";
 
-                            // Comando oficial para instalar Kali usando proot-distro
                             String script = "export PREFIX=" + PREFIX + "; " +
                                             "export HOME=" + HOME + "; " +
                                             "export PATH=" + PATH + "; " +
@@ -250,7 +274,6 @@ final class TermuxInstaller {
                             
                             Process process = pb.start();
                             
-                            // Leemos la salida para que no se congele el proceso
                             BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
                             String line;
                             while ((line = reader.readLine()) != null) {
@@ -272,9 +295,14 @@ final class TermuxInstaller {
                     showBootstrapErrorDialog(activity, whenDone, Logger.getStackTracesMarkdownString(null, Logger.getStackTracesStringArray(e)));
 
                 } finally {
+                    // =========================================================
+                    // MODIFICACIÓN: Cerrar el diálogo en el UI Thread de forma segura
+                    // =========================================================
                     activity.runOnUiThread(() -> {
                         try {
-                            progress.dismiss();
+                            if (progressHolder[0] != null && progressHolder[0].isShowing()) {
+                                progressHolder[0].dismiss();
+                            }
                         } catch (RuntimeException e) {
                             // Activity already dismissed - ignore.
                         }
