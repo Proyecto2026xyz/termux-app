@@ -433,10 +433,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         if (mTerminalViewTop != null) {
             mTerminalViewTop.setTerminalViewClient(mTermuxTerminalViewClient);
+            mTerminalViewTop.setTextSize(12); // Inicializar el renderizador
+            // MODIFICACIÓN: Listener para cambiar el foco a la vista de arriba al tocarla
+            mTerminalViewTop.setOnClickListener(v -> {
+                mTerminalView = mTerminalViewTop;
+                mTerminalViewTop.requestFocus();
+            });
+            mTerminalViewTop.setOnFocusChangeListener((v, hasFocus) -> {
+                if (hasFocus) mTerminalView = mTerminalViewTop;
+            });
         }
 
         if (mTerminalViewBottom != null) {
             mTerminalViewBottom.setTerminalViewClient(mTermuxTerminalViewClient);
+            mTerminalViewBottom.setTextSize(12); // Inicializar el renderizador
+            // MODIFICACIÓN: Listener para cambiar el foco a la vista de abajo al tocarla
+            mTerminalViewBottom.setOnClickListener(v -> {
+                mTerminalView = mTerminalViewBottom;
+                mTerminalViewBottom.requestFocus();
+            });
+            mTerminalViewBottom.setOnFocusChangeListener((v, hasFocus) -> {
+                if (hasFocus) mTerminalView = mTerminalViewBottom;
+            });
         }
 
         if (mTermuxTerminalViewClient != null)
