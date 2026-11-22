@@ -148,12 +148,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             Logger.logError(LOG_TAG, "Error setting thread priority: " + e.getMessage());
         }
 
-        // =========================================================
-        // MODIFICACIÓN 2 (SEGURIDAD): ACTIVAR FLAG_SECURE
-        // Esto evita capturas de pantalla, grabaciones y vistas previas en la multitarea.
-        // =========================================================
-        getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
-
         mIsOnResumeAfterOnCreate = true;
 
         if (savedInstanceState != null)
@@ -263,6 +257,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         super.onResume();
 
         Logger.logVerbose(LOG_TAG, "onResume");
+
+        // =========================================================
+        // MODIFICACIÓN 2 (SEGURIDAD): ACTIVAR FLAG_SECURE DE FORMA SEGURA
+        // Se hace aquí para evitar que el sistema mate la app al arrancar.
+        // =========================================================
+        runOnUiThread(() -> {
+            try {
+                getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
+            } catch (Exception e) {
+                Logger.logError(LOG_TAG, "Error applying FLAG_SECURE: " + e.getMessage());
+            }
+        });
 
         if (mIsInvalidState) return;
 
